@@ -1,0 +1,6 @@
+fastapi
+pymongo
+uvicorn
+pydantic
+uuid
+python-multipart
