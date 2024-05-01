@@ -63,7 +63,7 @@ class popular_coffee_shop_record(BaseModel):
 class review_record(BaseModel):    
     Cof_shop_name:str
     Cof_shop_id:str     
-    User_id:str
+    user_id:str
     rating:str
     rating_id:str
     comment:str
