@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 import os
 import shutil
 from fastapi.staticfiles import StaticFiles
-
+import datetime
 app = FastAPI()
 
 uri = "mongodb://mongoadmin:mongoadmin@mongo_db:27017/?authMechanism=DEFAULT"
@@ -144,7 +144,6 @@ async def find_coffee_shop():
     }
 
 
-
 @app.get("/Coffee_shop_page/")
 async def find_coffee_shop():
     coffee_shops = list(db.coffee_shops.find())
@@ -161,7 +160,33 @@ async def find_coffee_shop():
         "user": json.loads(json_util.dumps(user))
     }
 
+@app.post("/reviews/")
+async def post_review(review):
+    review_dict = review.dict()
+    review_dict['date_posted'] = datetime.utcnow()
+    db.reviews.insert_one(review_dict)
+    return {"message": "Review posted successfully", "review": review_dict}
 
+
+@app.get("/reviews/{cof_shop_id}")
+async def get_reviews(cof_shop_id: str):
+    reviews = list(db.reviews.find({"cof_shop_id": cof_shop_id}))
+    if not reviews:
+        raise HTTPException(status_code=404, detail="No reviews found for this coffee shop")
+
+    average_rating = sum(review['rating'] for review in reviews) / len(reviews)
+    rating_distribution = {str(star): 0 for star in range(1, 6)}
+    for review in reviews:
+        star = str(int(round(review['rating'], 0)))
+        rating_distribution[star] += 1
+
+    return {
+        "average_rating": average_rating,
+        "total_reviews": len(reviews),
+        "rating_distribution": rating_distribution,
+        "reviews": reviews
+    }
+    
 @app.post("/upload_image/")
 async def upload_image(file: UploadFile = File(...)):
     # Generate a unique filename to avoid conflicts
