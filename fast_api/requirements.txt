@@ -4,3 +4,5 @@ uvicorn
 pydantic
 uuid
 python-multipart
+passlib==1.7.4
+PyJWT==2.3.0

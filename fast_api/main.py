@@ -9,7 +9,12 @@ from fastapi.responses import FileResponse
 import os
 import shutil
 from fastapi.staticfiles import StaticFiles
+from passlib.context import CryptContext
+import jwt
+from datetime import datetime, timedelta
+from model.user import *
 
+import secrets
 app = FastAPI()
 
 uri = "mongodb://mongoadmin:mongoadmin@mongo_db:27017/?authMechanism=DEFAULT"
@@ -21,6 +26,10 @@ if not os.path.exists(IMAGEDIR):
 app.mount("/images", StaticFiles(directory=IMAGEDIR), name="images")
 client = MongoClient(uri, connect=False)
 db = client['CoffeeApp']
+
+
+SECRET_KEY = secrets.token_hex(32)
+
 
 class Images(BaseModel):
     filename: str
@@ -69,30 +78,12 @@ class review_record(BaseModel):
     comment:str
     # last_comment:datetime
  
-class users_record(BaseModel):
-    username:str
-    password:str
-    user_id:str
-    email:str
-    cof_shop_id:str
-
-
-# @app.post("/upload-image/")
-# async def upload_image(file: UploadFile = UploadFile(...)):
-#     contents = await file.read()
-#     filepath = os.path.join(IMAGEDIR, file.filename)
-#     with open(filepath, "wb") as f:
-#         f.write(contents)
-#     image_data = {"filename": file.filename, "url": filepath}
-#     db.images.insert_one(image_data)
-#     return {"filename": file.filename, "url": filepath}
-
-# @app.get("/images/{image_id}")
-# async def get_image(image_id: str):
-#     image_path = os.path.join(IMAGEDIR, image_id)
-#     if not os.path.exists(image_path):
-#         raise HTTPException(status_code=404, detail="Image not found")
-#     return FileResponse(image_path)
+# class users_record(BaseModel):
+#     username:str
+#     password:str
+#     user_id:str
+#     email:str
+#     cof_shop_id:str
 
 @app.get("/users/")
 async def find_user_id():
@@ -104,12 +95,6 @@ async def find_username(username):
     users = db.users.find_one({'username':username})
     return {"users": json.loads(json_util.dumps(users))}
 
-# @app.get("/test/")
-# async def find_coffee_shop():
-#     coffee_shops = db.coffee_shops.find()
-#     coffee_beans = db.coffee_beans.find()
-#     data = coffee_shops+ coffee_beans
-#     return {"coffee_shop": json.loads(json_util.dumps(data))}
 
 @app.get("/coffee_shop/")
 async def find_coffee_shop():
@@ -184,4 +169,76 @@ async def upload_image(file: UploadFile = File(...)):
     return {"filename": unique_filename, "url": f"/images/{unique_filename}"}
 
 
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+
+#create JWT token
+def create_access_token(data: dict, expires_delta: timedelta):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + expires_delta
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm="HS256")
+    return encoded_jwt
+
+
+
+@app.post("/register/")
+def register_user(register_request: RegisterRequest):
+    hashed_password = pwd_context.hash(register_request.password)
+    new_user = users_record(username=register_request.username, email=register_request.email, hashed_password=hashed_password)
+    db.user.insert_one(new_user.dict()).__inserted_id
+    return {"message": "User registered successfully"}
+
+@app.post("/login/")
+def login_user(login_request: LoginRequest):
+
+    user = db.user.find_one({
+    "$or": [
+        {"username": login_request.username},
+        {"email": login_request.username}
+    ]
+})
+    if user and pwd_context.verify(login_request.password, user["hashed_password"]):
+        # Create JWT token with user's username and expiration time
+        access_token_expires = timedelta(minutes=30)
+        access_token = create_access_token(data={"sub": user["username"]}, expires_delta=access_token_expires)
+        return {"access_token": access_token, "token_type": "bearer","username":user["username"]}
+    else:
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+
+#users ทั้งหมด
+@app.get("/all/")
+def get_all_users():
+    users = db.user.find()
+    #print(product,type(product))
+    return {"users": json.loads(json_util.dumps(users))}
+#สร้าง user
+@app.post("/users/")
+def create_user(user_data: users_record):
+    user_id = db.user.insert_one(user_data.dict()).inserted_id
+    return {"users": "User created successfully", "user_id": str(user_id)}
+#เรียก user
+@app.get("/users/{users_id}")
+def get_user(users_id: str):
+    user = db.user.find_one({"_id": ObjectId(users_id)})
+    if user:
+        user["_id"] = str(user["_id"])  # Convert ObjectId to string
+        return user
+    else:
+        raise HTTPException(status_code=404, detail="User not found")
+#edit user
+@app.put("/users/{users_id}")
+def update_user(users_id: str, users_data: dict):
+    result = db.user.update_one({"_id": ObjectId(users_id)}, {"$set": users_data})
+    if result.modified_count == 1:
+        return {"message": "User updated successfully"}
+    else:
+        raise HTTPException(status_code=404, detail="User not found")
+#delete user
+@app.delete("/users/{users_id}")
+def delete_user(users_id: str):
+    result = db.user.delete_one({"_id": ObjectId(users_id)})
+    if result.deleted_count == 1:
+        return {"message": "User deleted successfully"}
+    else:
+        raise HTTPException(status_code=404, detail="User not found")
