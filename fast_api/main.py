@@ -186,13 +186,13 @@ def create_access_token(data: dict, expires_delta: timedelta):
 def register_user(register_request: RegisterRequest):
     hashed_password = pwd_context.hash(register_request.password)
     new_user = users_record(username=register_request.username, email=register_request.email, hashed_password=hashed_password)
-    db.user.insert_one(new_user.dict()).__inserted_id
+    db.users.insert_one(new_user.dict()).__inserted_id
     return {"message": "User registered successfully"}
 
 @app.post("/login/")
 def login_user(login_request: LoginRequest):
 
-    user = db.user.find_one({
+    user = db.users.find_one({
     "$or": [
         {"username": login_request.username},
         {"email": login_request.username}
@@ -209,18 +209,18 @@ def login_user(login_request: LoginRequest):
 #users ทั้งหมด
 @app.get("/all/")
 def get_all_users():
-    users = db.user.find()
+    users = db.users.find()
     #print(product,type(product))
     return {"users": json.loads(json_util.dumps(users))}
 #สร้าง user
 @app.post("/users/")
 def create_user(user_data: users_record):
-    user_id = db.user.insert_one(user_data.dict()).inserted_id
+    user_id = db.users.insert_one(user_data.dict()).inserted_id
     return {"users": "User created successfully", "user_id": str(user_id)}
 #เรียก user
 @app.get("/users/{users_id}")
 def get_user(users_id: str):
-    user = db.user.find_one({"_id": ObjectId(users_id)})
+    user = db.users.find_one({"_id": ObjectId(users_id)})
     if user:
         user["_id"] = str(user["_id"])  # Convert ObjectId to string
         return user
@@ -229,7 +229,7 @@ def get_user(users_id: str):
 #edit user
 @app.put("/users/{users_id}")
 def update_user(users_id: str, users_data: dict):
-    result = db.user.update_one({"_id": ObjectId(users_id)}, {"$set": users_data})
+    result = db.users.update_one({"_id": ObjectId(users_id)}, {"$set": users_data})
     if result.modified_count == 1:
         return {"message": "User updated successfully"}
     else:
@@ -237,7 +237,7 @@ def update_user(users_id: str, users_data: dict):
 #delete user
 @app.delete("/users/{users_id}")
 def delete_user(users_id: str):
-    result = db.user.delete_one({"_id": ObjectId(users_id)})
+    result = db.users.delete_one({"_id": ObjectId(users_id)})
     if result.deleted_count == 1:
         return {"message": "User deleted successfully"}
     else:
